@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
+using Telegram.Bot.Types.ReplyMarkups;
 
 namespace DebtCollectorBotWebApi
 {
@@ -20,7 +21,7 @@ namespace DebtCollectorBotWebApi
     {
         private string ApiToken { get; }
         private long ObolenskiTGId { get; }
-        private long MyWifeTGId { get; }
+        private long WifeTGId { get; }
         private readonly ITelegramBotClient BotClient;
         private readonly IDispatcher _dispatcher;
 
@@ -30,7 +31,7 @@ namespace DebtCollectorBotWebApi
 
             ApiToken = Environment.GetEnvironmentVariable("TelegramBotApiToken");
             ObolenskiTGId = long.Parse(Environment.GetEnvironmentVariable("ObolenskiTGId"));
-            MyWifeTGId = long.Parse(Environment.GetEnvironmentVariable("MyWifeTGId"));
+            WifeTGId = long.Parse(Environment.GetEnvironmentVariable("MyWifeTGId"));
 
             BotClient = new TelegramBotClient(ApiToken);
         }
@@ -53,22 +54,28 @@ namespace DebtCollectorBotWebApi
 
         public async Task HandleUpdateAsync(Update update)
         {
-            if (update.Type != UpdateType.Message)
+            if (update.Type == UpdateType.CallbackQuery)
             {
-                return;
+                await ReactToCallbackQuery(update);
             }
 
-            if (update.Message.Type != MessageType.Text)
+            if (update.Type == UpdateType.Message)
             {
-                return;
+                if (update.Message.Type == MessageType.Text)
+                {
+                    await AnswerTextMessage(update);
+                }
             }
+        }
 
+        private async Task AnswerTextMessage(Update update)
+        {
             User sender = update.Message.From;
             long chatId = update.Message.Chat.Id;
 
             Console.WriteLine($"Received a '{update.Message.Text}' message from " + sender.Id + ", " + sender.Username);
 
-            long[] allowedIds = { ObolenskiTGId, MyWifeTGId };
+            long[] allowedIds = { ObolenskiTGId, WifeTGId };
             if (!allowedIds.Contains(sender.Id))
             {
                 await BotClient.SendTextMessageAsync(
@@ -86,14 +93,49 @@ namespace DebtCollectorBotWebApi
 
             string response = await _dispatcher.GetResponseFromMessageAsync(update.Message.Text, spouseCode);
 
+            string inlineButtonText = update.Message.From.Id == ObolenskiTGId
+                                    ? "сказать Белке"
+                                    : "сказать Элу";
+            var inlineKeyboard = new InlineKeyboardMarkup(new[]
+                {
+                    new []
+                    {
+                        InlineKeyboardButton.WithCallbackData(inlineButtonText, "publish"),
+                    }
+                });
+
             await BotClient.SendTextMessageAsync(
                 chatId: chatId,
-                text: response
+                text: response,
+                replyMarkup: inlineKeyboard
             );
 
-            if (spouseCode == "B")
+            //if (spouseCode == "B")
+            //{
+            //    await SendMessageToAl($"Белка: {update.Message.Text}. {response}");
+            //}
+        }
+
+        private async Task ReactToCallbackQuery(Update update)
+        {
+            if (update.CallbackQuery.Data == "publish")
             {
-                await SendMessageToAl($"Белка: {update.Message.Text}. {response}");
+                string messageToSend = _dispatcher.GetBalanceMessage();
+
+                if (update.CallbackQuery.From.Id == ObolenskiTGId)
+                {
+                    await SendMessageToWife(messageToSend);
+                }
+
+                if (update.CallbackQuery.From.Id == WifeTGId)
+                {
+                    await SendMessageToAl(messageToSend);
+                }
+
+                await BotClient.AnswerCallbackQueryAsync(
+                    callbackQueryId : update.CallbackQuery.Id,
+                    text: "я передал"
+                    );
             }
         }
 
@@ -101,6 +143,14 @@ namespace DebtCollectorBotWebApi
         {
             await BotClient.SendTextMessageAsync(
                 chatId: ObolenskiTGId,
+                text: v
+            );
+        }
+
+        public async Task SendMessageToWife(string v)
+        {
+            await BotClient.SendTextMessageAsync(
+                chatId: WifeTGId,
                 text: v
             );
         }

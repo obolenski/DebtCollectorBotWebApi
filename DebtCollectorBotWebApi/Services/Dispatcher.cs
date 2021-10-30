@@ -8,6 +8,7 @@ namespace DebtCollectorBotWebApi
     public interface IDispatcher
     {
         Task<string> GetResponseFromMessageAsync(string message, string spouseCode);
+        public string GetBalanceMessage();
     }
 
     internal class Dispatcher : IDispatcher
@@ -34,9 +35,7 @@ namespace DebtCollectorBotWebApi
 
             await ProcessArgsAsync(args, spouseCode);
 
-            decimal bal = _accountingService.Balance;
-
-            response.AppendLine(GetBalanceMessage(bal));
+            response.AppendLine(GetBalanceMessage());
 
             return response.ToString();
         }
@@ -63,8 +62,10 @@ namespace DebtCollectorBotWebApi
             }
         }
 
-        private string GetBalanceMessage(decimal balance)
+        public string GetBalanceMessage()
         {
+            decimal balance = _accountingService.Balance;
+
             if (balance > 0)
             {
                 return "белка дожна элу " + balance + " BYN";
