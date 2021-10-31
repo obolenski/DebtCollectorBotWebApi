@@ -14,7 +14,6 @@ namespace DebtCollectorBotWebApi
     }
 
     internal class AccountingService : IAccountingService
-
     {
         public decimal Balance { get; set; }
         public decimal AlCredit { get; set; }
@@ -62,6 +61,5 @@ namespace DebtCollectorBotWebApi
             await _mongoService.UpdateBelCreditAsync(BelCredit);
             await UpdateBalanceAsync();
         }
-
     }
 }

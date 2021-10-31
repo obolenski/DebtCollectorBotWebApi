@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -100,17 +99,6 @@ namespace DebtCollectorBotWebApi
             }
 
             return result;
-        }
-    }
-
-    internal class ValidationResult
-    {
-        internal bool Success { get; set; }
-        internal List<string> ErrorMessages { get; set; }
-        public ValidationResult()
-        {
-            Success = true;
-            ErrorMessages = new List<string>();
         }
     }
 }
