@@ -1,5 +1,5 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
+using Microsoft.AspNetCore.Mvc;
 using Telegram.Bot.Types;
 
 namespace DebtCollectorBotWebApi.Controllers
@@ -7,11 +7,12 @@ namespace DebtCollectorBotWebApi.Controllers
     [ApiController]
     public class BotController : ControllerBase
     {
-        private ITelegramBotService _telegramBotService { get; set; }
         public BotController(ITelegramBotService telegramBotService)
         {
             _telegramBotService = telegramBotService;
         }
+
+        private ITelegramBotService _telegramBotService { get; }
 
         [Route("/")]
         [HttpGet]

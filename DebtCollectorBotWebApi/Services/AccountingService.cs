@@ -1,7 +1,7 @@
-﻿using DebtCollectorBotWebApi.Data;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
+using DebtCollectorBotWebApi.Data;
 
-namespace DebtCollectorBotWebApi
+namespace DebtCollectorBotWebApi.Services
 {
     internal interface IAccountingService
     {
@@ -10,14 +10,10 @@ namespace DebtCollectorBotWebApi
         decimal BelCredit { get; set; }
 
         Task ChangeCreditByAsync(decimal amountToChangeBy, string spouseCode);
-        Task UpdateBalanceAsync();
     }
 
     internal class AccountingService : IAccountingService
     {
-        public decimal Balance { get; set; }
-        public decimal AlCredit { get; set; }
-        public decimal BelCredit { get; set; }
         private readonly IMongoService _mongoService;
 
         public AccountingService(IMongoService mongoService)
@@ -29,7 +25,11 @@ namespace DebtCollectorBotWebApi
             BelCredit = _mongoService.GetBelCredit();
         }
 
-        public async Task UpdateBalanceAsync()
+        public decimal Balance { get; set; }
+        public decimal AlCredit { get; set; }
+        public decimal BelCredit { get; set; }
+
+        private async Task UpdateBalanceAsync()
         {
             Balance = AlCredit - BelCredit;
             await _mongoService.UpdateBalanceAsync(Balance);
@@ -37,15 +37,9 @@ namespace DebtCollectorBotWebApi
 
         public async Task ChangeCreditByAsync(decimal amountToChangeBy, string spouseCode)
         {
-            if (spouseCode == "A")
-            {
-                await ChangeAlCreditByAsync(amountToChangeBy);
-            }
+            if (spouseCode == "A") await ChangeAlCreditByAsync(amountToChangeBy);
 
-            if (spouseCode == "B")
-            {
-                await ChangeBelCreditByAsync(amountToChangeBy);
-            }
+            if (spouseCode == "B") await ChangeBelCreditByAsync(amountToChangeBy);
         }
 
         private async Task ChangeAlCreditByAsync(decimal amount)

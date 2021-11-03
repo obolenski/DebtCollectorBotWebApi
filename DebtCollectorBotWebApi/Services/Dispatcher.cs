@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Text;
 using System.Threading.Tasks;
+using DebtCollectorBotWebApi.Services;
 
 namespace DebtCollectorBotWebApi
 {
@@ -12,19 +13,20 @@ namespace DebtCollectorBotWebApi
 
     internal class Dispatcher : IDispatcher
     {
-        private IAccountingService _accountingService { get; set; }
-
         public Dispatcher(IAccountingService accountingService)
         {
             _accountingService = accountingService;
         }
+
+        private IAccountingService _accountingService { get; }
+
         public async Task<string> GetResponseFromMessageAsync(string message, string spouseCode)
         {
-            StringBuilder response = new StringBuilder();
+            var response = new StringBuilder();
 
-            string[] args = message.Split(' ');
+            var args = message.Split(' ');
 
-            ValidationResult validationResult = ValidateInput(args);
+            var validationResult = ValidateInput(args);
             if (!validationResult.Success)
             {
                 response.Clear();
@@ -39,14 +41,21 @@ namespace DebtCollectorBotWebApi
             return response.ToString();
         }
 
+        public string GetBalanceMessage()
+        {
+            var balance = _accountingService.Balance;
+
+            if (balance > 0) return "белка дожна элу " + balance + " BYN";
+            if (balance < 0) return "эл должен белке " + Math.Abs(balance) + " BYN";
+            if (balance == 0) return "никто никому ничего не должен";
+            return "weird balance message";
+        }
+
         private async Task ProcessArgsAsync(string[] args, string spouseCode)
         {
-            decimal value = decimal.Parse(args[0]);
+            var value = decimal.Parse(args[0]);
 
-            if (args.Length == 1 && value == 0)
-            {
-                return;
-            }
+            if (args.Length == 1 && value == 0) return;
 
             if (args.Length == 1 && value != 0)
             {
@@ -56,45 +65,25 @@ namespace DebtCollectorBotWebApi
 
             if (args.Length == 2)
             {
-                await _accountingService.ChangeCreditByAsync((value / 2), spouseCode);
-                return;
+                await _accountingService.ChangeCreditByAsync(value / 2, spouseCode);
             }
-        }
-
-        public string GetBalanceMessage()
-        {
-            decimal balance = _accountingService.Balance;
-
-            if (balance > 0)
-            {
-                return "белка дожна элу " + balance + " BYN";
-            }
-            if (balance < 0)
-            {
-                return "эл должен белке " + Math.Abs(balance) + " BYN";
-            }
-            if (balance == 0)
-            {
-                return "никто никому ничего не должен";
-            }
-            return "weird balance message";
         }
 
         private ValidationResult ValidateInput(string[] args)
         {
-            ValidationResult result = new ValidationResult();
+            var result = new ValidationResult();
 
-            if (!decimal.TryParse(args[0], out decimal parsedAmount))
+            if (!decimal.TryParse(args[0], out var parsedAmount))
             {
                 result.Success = false;
-                string ErrorMessage = "first argument should be a number";
+                var ErrorMessage = "first argument should be a number";
                 result.ErrorMessages.Add(ErrorMessage);
             }
 
             if (args.Length >= 2 && args[1] != "о" && args[1] != "o")
             {
                 result.Success = false;
-                string ErrorMessage = "second argument should be an o";
+                var ErrorMessage = "second argument should be an o";
                 result.ErrorMessages.Add(ErrorMessage);
             }
 

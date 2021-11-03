@@ -19,29 +19,30 @@ namespace DebtCollectorBotWebApi
 
     internal class TelegramBotService : ITelegramBotService
     {
-        private string ApiToken { get; }
-        private long ObolenskiTGId { get; }
-        private long WifeTGId { get; }
-        private readonly ITelegramBotClient BotClient;
         private readonly IDispatcher _dispatcher;
+        private readonly ITelegramBotClient _botClient;
 
         public TelegramBotService(IDispatcher dispatcher)
         {
             _dispatcher = dispatcher;
 
             ApiToken = Environment.GetEnvironmentVariable("TelegramBotApiToken");
-            ObolenskiTGId = long.Parse(Environment.GetEnvironmentVariable("ObolenskiTGId"));
-            WifeTGId = long.Parse(Environment.GetEnvironmentVariable("MyWifeTGId"));
+            ObolenskiTgId = long.Parse(Environment.GetEnvironmentVariable("ObolenskiTGId"));
+            WifeTgId = long.Parse(Environment.GetEnvironmentVariable("MyWifeTGId"));
 
-            BotClient = new TelegramBotClient(ApiToken);
+            _botClient = new TelegramBotClient(ApiToken);
         }
+
+        private string ApiToken { get; }
+        private long ObolenskiTgId { get; }
+        private long WifeTgId { get; }
 
         public async Task SetWebHookAsync(CancellationToken cancellationToken)
         {
-            string webhookAddress = $"https://debtcollectorbot.herokuapp.com/{ApiToken}";
+            var webhookAddress = $"https://debtcollectorbot.herokuapp.com/{ApiToken}";
             Console.WriteLine("Webhook set at " + webhookAddress);
-            await BotClient.SetWebhookAsync(
-                url: webhookAddress,
+            await _botClient.SetWebhookAsync(
+                webhookAddress,
                 allowedUpdates: Array.Empty<UpdateType>(),
                 cancellationToken: cancellationToken);
         }
@@ -49,64 +50,74 @@ namespace DebtCollectorBotWebApi
         public async Task DeleteWebHookAsync(CancellationToken cancellationToken)
         {
             Console.WriteLine("Webhook deleted");
-            await BotClient.DeleteWebhookAsync(cancellationToken: cancellationToken);
+            await _botClient.DeleteWebhookAsync(cancellationToken: cancellationToken);
         }
 
         public async Task HandleUpdateAsync(Update update)
         {
-            if (update.Type == UpdateType.CallbackQuery)
+            var handler = update.Type switch
             {
-                await ReactToCallbackQuery(update);
-            }
+                UpdateType.Message => HandleMessageUpdate(update),
+                UpdateType.CallbackQuery => HandleCallbackQueryUpdate(update),
+                _ => HandleUnknownUpdate(update)
+            };
 
-            if (update.Type == UpdateType.Message)
-            {
-                if (update.Message.Type == MessageType.Text)
-                {
-                    await AnswerTextMessage(update);
-                }
-            }
+            await handler;
         }
 
-        private async Task AnswerTextMessage(Update update)
+        public async Task SendMessageToAl(string v)
         {
-            User sender = update.Message.From;
-            long chatId = update.Message.Chat.Id;
+            await _botClient.SendTextMessageAsync(
+                ObolenskiTgId,
+                v
+            );
+        }
+
+        private static Task HandleUnknownUpdate(Update update)
+        {
+            Console.WriteLine($"Received an update but don't have a handler. {update}");
+            return Task.CompletedTask;
+        }
+
+        private async Task HandleMessageUpdate(Update update)
+        {
+            var sender = update.Message.From;
+            var chatId = update.Message.Chat.Id;
 
             Console.WriteLine($"Received a '{update.Message.Text}' message from " + sender.Id + ", " + sender.Username);
 
-            long[] allowedIds = { ObolenskiTGId, WifeTGId };
+            long[] allowedIds = {ObolenskiTgId, WifeTgId};
             if (!allowedIds.Contains(sender.Id))
             {
-                await BotClient.SendTextMessageAsync(
-                chatId: chatId,
-                text: "vattela a pija 'nder culo");
+                await _botClient.SendTextMessageAsync(
+                    chatId,
+                    "vattela a pija 'nder culo");
 
                 await SendMessageToAl(
                     $"чужие лезут. {update.Message.From.Id}, {update.Message.From.Username}: {update.Message.Text}"
-                    );
+                );
 
                 return;
             }
 
-            string spouseCode = sender.Id == ObolenskiTGId ? "A" : "B";
+            var spouseCode = sender.Id == ObolenskiTgId ? "A" : "B";
 
-            string response = await _dispatcher.GetResponseFromMessageAsync(update.Message.Text, spouseCode);
+            var response = await _dispatcher.GetResponseFromMessageAsync(update.Message.Text, spouseCode);
 
-            string inlineButtonText = update.Message.From.Id == ObolenskiTGId
-                                    ? "сказать Белке"
-                                    : "сказать Элу";
+            var inlineButtonText = update.Message.From.Id == ObolenskiTgId
+                ? "сказать Белке"
+                : "сказать Элу";
             var inlineKeyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[]
                 {
-                    new []
-                    {
-                        InlineKeyboardButton.WithCallbackData(inlineButtonText, "publish"),
-                    }
-                });
+                    InlineKeyboardButton.WithCallbackData(inlineButtonText, "publish")
+                }
+            });
 
-            await BotClient.SendTextMessageAsync(
-                chatId: chatId,
-                text: response,
+            await _botClient.SendTextMessageAsync(
+                chatId,
+                response,
                 replyMarkup: inlineKeyboard
             );
 
@@ -116,42 +127,28 @@ namespace DebtCollectorBotWebApi
             //}
         }
 
-        private async Task ReactToCallbackQuery(Update update)
+        private async Task HandleCallbackQueryUpdate(Update update)
         {
             if (update.CallbackQuery.Data == "publish")
             {
-                string messageToSend = _dispatcher.GetBalanceMessage();
+                var messageToSend = _dispatcher.GetBalanceMessage();
 
-                if (update.CallbackQuery.From.Id == ObolenskiTGId)
-                {
-                    await SendMessageToWife(messageToSend);
-                }
+                if (update.CallbackQuery.From.Id == ObolenskiTgId) await SendMessageToWife(messageToSend);
 
-                if (update.CallbackQuery.From.Id == WifeTGId)
-                {
-                    await SendMessageToAl(messageToSend);
-                }
+                if (update.CallbackQuery.From.Id == WifeTgId) await SendMessageToAl(messageToSend);
 
-                await BotClient.AnswerCallbackQueryAsync(
-                    callbackQueryId : update.CallbackQuery.Id,
-                    text: "я передал"
-                    );
+                await _botClient.AnswerCallbackQueryAsync(
+                    update.CallbackQuery.Id,
+                    "я передал"
+                );
             }
-        }
-
-        public async Task SendMessageToAl(string v)
-        {
-            await BotClient.SendTextMessageAsync(
-                chatId: ObolenskiTGId,
-                text: v
-            );
         }
 
         public async Task SendMessageToWife(string v)
         {
-            await BotClient.SendTextMessageAsync(
-                chatId: WifeTGId,
-                text: v
+            await _botClient.SendTextMessageAsync(
+                WifeTgId,
+                v
             );
         }
     }
