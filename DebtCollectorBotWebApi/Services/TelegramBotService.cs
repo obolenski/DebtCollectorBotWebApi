@@ -37,22 +37,6 @@ namespace DebtCollectorBotWebApi
         private long ObolenskiTgId { get; }
         private long WifeTgId { get; }
 
-        public async Task SetWebHookAsync(CancellationToken cancellationToken)
-        {
-            var webhookAddress = $"https://debtcollectorbot.herokuapp.com/{ApiToken}";
-            Console.WriteLine("Webhook set at " + webhookAddress);
-            await _botClient.SetWebhookAsync(
-                webhookAddress,
-                allowedUpdates: Array.Empty<UpdateType>(),
-                cancellationToken: cancellationToken);
-        }
-
-        public async Task DeleteWebHookAsync(CancellationToken cancellationToken)
-        {
-            Console.WriteLine("Webhook deleted");
-            await _botClient.DeleteWebhookAsync(cancellationToken: cancellationToken);
-        }
-
         public async Task HandleUpdateAsync(Update update)
         {
             var handler = update.Type switch
@@ -69,6 +53,14 @@ namespace DebtCollectorBotWebApi
         {
             await _botClient.SendTextMessageAsync(
                 ObolenskiTgId,
+                v
+            );
+        }
+        
+        public async Task SendMessageToWife(string v)
+        {
+            await _botClient.SendTextMessageAsync(
+                WifeTgId,
                 v
             );
         }
@@ -101,55 +93,95 @@ namespace DebtCollectorBotWebApi
             }
 
             var spouseCode = sender.Id == ObolenskiTgId ? "A" : "B";
+            var validationResult = await _dispatcher.HandleTextCommandAsync(update.Message.Text, spouseCode);
+            if (!validationResult.Success)
+            {
+                var msg = string.Join(", ", validationResult.ErrorMessages);
+                await ReplyWithoutInlineKeyboard(msg, chatId);
+                return;
+            }
 
-            var response = await _dispatcher.GetResponseFromMessageAsync(update.Message.Text, spouseCode);
+            await ReplyWithInlineKeyboard(update, _dispatcher.GetBalanceMessage());
+        }
 
-            var inlineButtonText = update.Message.From.Id == ObolenskiTgId
-                ? "сказать Белке"
-                : "сказать Элу";
+        private async Task ReplyWithoutInlineKeyboard(string msg, long chatId)
+        {
+            await _botClient.SendTextMessageAsync(
+                chatId,
+                msg
+            );
+        }
+
+        private async Task ReplyWithInlineKeyboard(Update update, string msg)
+        {
+            var chatId = update.Message.Chat.Id;
+            var publishButtonText = update.Message.From.Id == ObolenskiTgId
+                ? "сказать белке"
+                : "сказать элу";
+            var refreshBalanceButtonText = "узнать баланс";
             var inlineKeyboard = new InlineKeyboardMarkup(new[]
             {
                 new[]
                 {
-                    InlineKeyboardButton.WithCallbackData(inlineButtonText, "publish")
+                    InlineKeyboardButton.WithCallbackData(publishButtonText, "publish"),
+                    InlineKeyboardButton.WithCallbackData(refreshBalanceButtonText, "refresh_balance")
                 }
             });
 
             await _botClient.SendTextMessageAsync(
                 chatId,
-                response,
+                msg,
                 replyMarkup: inlineKeyboard
             );
-
-            //if (spouseCode == "B")
-            //{
-            //    await SendMessageToAl($"Белка: {update.Message.Text}. {response}");
-            //}
         }
 
         private async Task HandleCallbackQueryUpdate(Update update)
         {
-            if (update.CallbackQuery.Data == "publish")
+            var handler = update.CallbackQuery.Data switch
             {
-                var messageToSend = _dispatcher.GetBalanceMessage();
-
-                if (update.CallbackQuery.From.Id == ObolenskiTgId) await SendMessageToWife(messageToSend);
-
-                if (update.CallbackQuery.From.Id == WifeTgId) await SendMessageToAl(messageToSend);
-
-                await _botClient.AnswerCallbackQueryAsync(
-                    update.CallbackQuery.Id,
-                    "я передал"
-                );
-            }
+                "publish" => HandlePublishCallbackQuery(update),
+                "refresh_balance" => HandleRefreshCallbackQuery(update),
+                _ => HandleUnknownUpdate(update)
+            };
+            await handler;
         }
 
-        public async Task SendMessageToWife(string v)
+        private async Task HandleRefreshCallbackQuery(Update update)
         {
-            await _botClient.SendTextMessageAsync(
-                WifeTgId,
-                v
+            await ReplyWithInlineKeyboard(update, _dispatcher.GetBalanceMessage());
+            await _botClient.AnswerCallbackQueryAsync(
+                update.CallbackQuery.Id,
+                "свежий баланс"
             );
+        }
+
+        private async Task HandlePublishCallbackQuery(Update update)
+        {
+            var messageToSend = _dispatcher.GetBalanceMessage();
+
+            if (update.CallbackQuery.From.Id == ObolenskiTgId) await SendMessageToWife(messageToSend);
+
+            if (update.CallbackQuery.From.Id == WifeTgId) await SendMessageToAl(messageToSend);
+
+            await _botClient.AnswerCallbackQueryAsync(
+                update.CallbackQuery.Id,
+                "я передал"
+            );
+        }
+        public async Task SetWebHookAsync(CancellationToken cancellationToken)
+        {
+            var webhookAddress = $"https://debtcollectorbot.herokuapp.com/{ApiToken}";
+            Console.WriteLine("Webhook set at " + webhookAddress);
+            await _botClient.SetWebhookAsync(
+                webhookAddress,
+                allowedUpdates: Array.Empty<UpdateType>(),
+                cancellationToken: cancellationToken);
+        }
+
+        public async Task DeleteWebHookAsync(CancellationToken cancellationToken)
+        {
+            Console.WriteLine("Webhook deleted");
+            await _botClient.DeleteWebhookAsync(cancellationToken: cancellationToken);
         }
     }
 }

@@ -2,7 +2,7 @@
 
 namespace DebtCollectorBotWebApi
 {
-    internal class ValidationResult
+    public class ValidationResult
     {
         public ValidationResult()
         {

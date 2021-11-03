@@ -7,53 +7,51 @@ namespace DebtCollectorBotWebApi
 {
     public interface IDispatcher
     {
-        Task<string> GetResponseFromMessageAsync(string message, string spouseCode);
+        Task<ValidationResult> HandleTextCommandAsync(string message, string spouseCode);
         public string GetBalanceMessage();
     }
 
     internal class Dispatcher : IDispatcher
     {
+        private IAccountingService _accountingService { get; }
         public Dispatcher(IAccountingService accountingService)
         {
             _accountingService = accountingService;
         }
 
-        private IAccountingService _accountingService { get; }
-
-        public async Task<string> GetResponseFromMessageAsync(string message, string spouseCode)
+        public async Task<ValidationResult> HandleTextCommandAsync(string message, string spouseCode)
         {
-            var response = new StringBuilder();
-
             var args = message.Split(' ');
 
             var validationResult = ValidateInput(args);
             if (!validationResult.Success)
             {
-                response.Clear();
-                response.Append(string.Join(", ", validationResult.ErrorMessages));
-                return response.ToString();
+                return validationResult;
             }
 
             await ProcessArgsAsync(args, spouseCode);
 
-            response.AppendLine(GetBalanceMessage());
-
-            return response.ToString();
+            return validationResult;
         }
 
         public string GetBalanceMessage()
         {
             var balance = _accountingService.Balance;
 
-            if (balance > 0) return "белка дожна элу " + balance + " BYN";
-            if (balance < 0) return "эл должен белке " + Math.Abs(balance) + " BYN";
-            if (balance == 0) return "никто никому ничего не должен";
-            return "weird balance message";
+            switch (balance)
+            {
+                case > 0:
+                    return "белка дожна элу " + balance + " BYN";
+                case < 0:
+                    return "эл должен белке " + Math.Abs(balance) + " BYN";
+                case 0:
+                    return "никто никому ничего не должен";
+            }
         }
 
         private async Task ProcessArgsAsync(string[] args, string spouseCode)
         {
-            var value = decimal.Parse(args[0]);
+            var value = decimal.Parse(args[0].Replace(",","."));
 
             if (args.Length == 1 && value == 0) return;
 

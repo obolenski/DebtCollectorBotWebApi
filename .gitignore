@@ -362,3 +362,6 @@ MigrationBackup/
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
 App.config
+.idea/.idea.DebtCollectorBotWebApi/.idea/vcs.xml
+.idea/.idea.DebtCollectorBotWebApi/.idea/encodings.xml
+.idea/.idea.DebtCollectorBotWebApi/.idea/indexLayout.xml
