@@ -97,14 +97,14 @@ namespace DebtCollectorBotWebApi
             if (!validationResult.Success)
             {
                 var msg = string.Join(", ", validationResult.ErrorMessages);
-                await ReplyWithoutInlineKeyboard(msg, chatId);
+                await SendMessageWithoutInlineKeyboard(msg, chatId);
                 return;
             }
 
-            await ReplyWithInlineKeyboard(update, _dispatcher.GetBalanceMessage());
+            await SendMessageWithInlineKeyboard(chatId, _dispatcher.GetBalanceMessage());
         }
 
-        private async Task ReplyWithoutInlineKeyboard(string msg, long chatId)
+        private async Task SendMessageWithoutInlineKeyboard(string msg, long chatId)
         {
             await _botClient.SendTextMessageAsync(
                 chatId,
@@ -112,10 +112,9 @@ namespace DebtCollectorBotWebApi
             );
         }
 
-        private async Task ReplyWithInlineKeyboard(Update update, string msg)
+        private async Task SendMessageWithInlineKeyboard(long chatId, string msg)
         {
-            var chatId = update.Message.Chat.Id;
-            var publishButtonText = update.Message.From.Id == ObolenskiTgId
+            var publishButtonText = chatId == ObolenskiTgId
                 ? "сказать белке"
                 : "сказать элу";
             var refreshBalanceButtonText = "узнать баланс";
@@ -148,7 +147,8 @@ namespace DebtCollectorBotWebApi
 
         private async Task HandleRefreshCallbackQuery(Update update)
         {
-            await ReplyWithInlineKeyboard(update, _dispatcher.GetBalanceMessage());
+            var chatId = update.CallbackQuery.From.Id;
+            await SendMessageWithInlineKeyboard(chatId, _dispatcher.GetBalanceMessage());
             await _botClient.AnswerCallbackQueryAsync(
                 update.CallbackQuery.Id,
                 "свежий баланс"
