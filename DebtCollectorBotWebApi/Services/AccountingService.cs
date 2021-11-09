@@ -1,5 +1,5 @@
-﻿using System.Threading.Tasks;
-using DebtCollectorBotWebApi.Data;
+﻿using DebtCollectorBotWebApi.Data;
+using System.Threading.Tasks;
 
 namespace DebtCollectorBotWebApi.Services
 {

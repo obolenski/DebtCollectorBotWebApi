@@ -14,7 +14,6 @@ namespace DebtCollectorBotWebApi
         Task HandleUpdateAsync(Update update);
         Task SetWebHookAsync(CancellationToken cancellationToken);
         Task DeleteWebHookAsync(CancellationToken cancellationToken);
-        Task SendMessageToAl(string v);
     }
 
     internal class TelegramBotService : ITelegramBotService
@@ -25,11 +24,9 @@ namespace DebtCollectorBotWebApi
         public TelegramBotService(IDispatcher dispatcher)
         {
             _dispatcher = dispatcher;
-
             ApiToken = Environment.GetEnvironmentVariable("TelegramBotApiToken");
             ObolenskiTgId = long.Parse(Environment.GetEnvironmentVariable("ObolenskiTGId"));
             WifeTgId = long.Parse(Environment.GetEnvironmentVariable("MyWifeTGId"));
-
             _botClient = new TelegramBotClient(ApiToken);
         }
 
@@ -49,46 +46,19 @@ namespace DebtCollectorBotWebApi
             await handler;
         }
 
-        public async Task SendMessageToAl(string v)
-        {
-            await _botClient.SendTextMessageAsync(
-                ObolenskiTgId,
-                v
-            );
-        }
-        
-        public async Task SendMessageToWife(string v)
-        {
-            await _botClient.SendTextMessageAsync(
-                WifeTgId,
-                v
-            );
-        }
-
-        private static Task HandleUnknownUpdate(Update update)
-        {
-            Console.WriteLine($"Received an update but don't have a handler. {update}");
-            return Task.CompletedTask;
-        }
-
         private async Task HandleMessageUpdate(Update update)
         {
+            if (update.Message.Type != MessageType.Text) return;
+
             var sender = update.Message.From;
             var chatId = update.Message.Chat.Id;
 
             Console.WriteLine($"Received a '{update.Message.Text}' message from " + sender.Id + ", " + sender.Username);
 
-            long[] allowedIds = {ObolenskiTgId, WifeTgId};
+            long[] allowedIds = { ObolenskiTgId, WifeTgId };
             if (!allowedIds.Contains(sender.Id))
             {
-                await _botClient.SendTextMessageAsync(
-                    chatId,
-                    "vattela a pija 'nder culo");
-
-                await SendMessageToAl(
-                    $"чужие лезут. {update.Message.From.Id}, {update.Message.From.Username}: {update.Message.Text}"
-                );
-
+                await SendMessage("vattela a pija 'nder culo", chatId);
                 return;
             }
 
@@ -97,41 +67,17 @@ namespace DebtCollectorBotWebApi
             if (!validationResult.Success)
             {
                 var msg = string.Join(", ", validationResult.ErrorMessages);
-                await SendMessageWithoutInlineKeyboard(msg, chatId);
+                await SendMessage(msg, chatId);
                 return;
             }
 
-            await SendMessageWithInlineKeyboard(chatId, _dispatcher.GetBalanceMessage());
+            await SendMessageWithInlineKeyboard(GetBalanceMessage(), chatId);
         }
 
-        private async Task SendMessageWithoutInlineKeyboard(string msg, long chatId)
+        private static Task HandleUnknownUpdate(Update update)
         {
-            await _botClient.SendTextMessageAsync(
-                chatId,
-                msg
-            );
-        }
-
-        private async Task SendMessageWithInlineKeyboard(long chatId, string msg)
-        {
-            var publishButtonText = chatId == ObolenskiTgId
-                ? "сказать белке"
-                : "сказать элу";
-            var refreshBalanceButtonText = "узнать баланс";
-            var inlineKeyboard = new InlineKeyboardMarkup(new[]
-            {
-                new[]
-                {
-                    InlineKeyboardButton.WithCallbackData(publishButtonText, "publish"),
-                    InlineKeyboardButton.WithCallbackData(refreshBalanceButtonText, "refresh_balance")
-                }
-            });
-
-            await _botClient.SendTextMessageAsync(
-                chatId,
-                msg,
-                replyMarkup: inlineKeyboard
-            );
+            Console.WriteLine($"Received an update but don't have a handler. {update}");
+            return Task.CompletedTask;
         }
 
         private async Task HandleCallbackQueryUpdate(Update update)
@@ -148,7 +94,7 @@ namespace DebtCollectorBotWebApi
         private async Task HandleRefreshCallbackQuery(Update update)
         {
             var chatId = update.CallbackQuery.From.Id;
-            await SendMessageWithInlineKeyboard(chatId, _dispatcher.GetBalanceMessage());
+            await SendMessageWithInlineKeyboard(GetBalanceMessage(), chatId);
             await _botClient.AnswerCallbackQueryAsync(
                 update.CallbackQuery.Id,
                 "свежий баланс"
@@ -157,17 +103,66 @@ namespace DebtCollectorBotWebApi
 
         private async Task HandlePublishCallbackQuery(Update update)
         {
-            var messageToSend = _dispatcher.GetBalanceMessage();
+            var messageToSend = GetBalanceMessage();
 
-            if (update.CallbackQuery.From.Id == ObolenskiTgId) await SendMessageToWife(messageToSend);
-
-            if (update.CallbackQuery.From.Id == WifeTgId) await SendMessageToAl(messageToSend);
+            if (update.CallbackQuery.From.Id == ObolenskiTgId) await SendMessage(messageToSend, WifeTgId);
+            if (update.CallbackQuery.From.Id == WifeTgId) await SendMessage(messageToSend, ObolenskiTgId);
 
             await _botClient.AnswerCallbackQueryAsync(
                 update.CallbackQuery.Id,
                 "я передал"
             );
         }
+
+        private async Task SendMessage(string msg, long chatId)
+        {
+            await _botClient.SendTextMessageAsync(
+                chatId,
+                msg
+            );
+        }
+
+        private async Task SendMessageWithInlineKeyboard(string msg, long chatId)
+        {
+            await _botClient.SendTextMessageAsync(
+                chatId,
+                msg,
+                replyMarkup: GetInlineKeyboard(chatId)
+            );
+        }
+
+        private InlineKeyboardMarkup GetInlineKeyboard(long chatId)
+        {
+            var publishButtonText = chatId == ObolenskiTgId
+                            ? "сказать белке"
+                            : "сказать элу";
+            var refreshBalanceButtonText = "узнать баланс";
+            var inlineKeyboard = new InlineKeyboardMarkup(new[]
+            {
+                new[]
+                {
+                    InlineKeyboardButton.WithCallbackData(publishButtonText, "publish"),
+                    InlineKeyboardButton.WithCallbackData(refreshBalanceButtonText, "refresh_balance")
+                }
+            });
+            return inlineKeyboard;
+        }
+
+        private string GetBalanceMessage()
+        {
+            var balance = _dispatcher.GetBalance();
+
+            switch (balance)
+            {
+                case > 0:
+                    return "белка дожна элу " + balance + " BYN";
+                case < 0:
+                    return "эл должен белке " + Math.Abs(balance) + " BYN";
+                case 0:
+                    return "никто никому ничего не должен";
+            }
+        }
+
         public async Task SetWebHookAsync(CancellationToken cancellationToken)
         {
             var webhookAddress = $"https://debtcollectorbot.herokuapp.com/{ApiToken}";

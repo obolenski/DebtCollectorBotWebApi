@@ -1,14 +1,13 @@
-﻿using System;
-using System.Text;
+﻿using DebtCollectorBotWebApi.Services;
+using System;
 using System.Threading.Tasks;
-using DebtCollectorBotWebApi.Services;
 
 namespace DebtCollectorBotWebApi
 {
     public interface IDispatcher
     {
         Task<ValidationResult> HandleTextCommandAsync(string message, string spouseCode);
-        public string GetBalanceMessage();
+        public decimal GetBalance();
     }
 
     internal class Dispatcher : IDispatcher
@@ -34,24 +33,14 @@ namespace DebtCollectorBotWebApi
             return validationResult;
         }
 
-        public string GetBalanceMessage()
+        public decimal GetBalance()
         {
-            var balance = _accountingService.Balance;
-
-            switch (balance)
-            {
-                case > 0:
-                    return "белка дожна элу " + balance + " BYN";
-                case < 0:
-                    return "эл должен белке " + Math.Abs(balance) + " BYN";
-                case 0:
-                    return "никто никому ничего не должен";
-            }
+            return _accountingService.Balance;
         }
 
         private async Task ProcessArgsAsync(string[] args, string spouseCode)
         {
-            var value = decimal.Parse(args[0].Replace(",","."));
+            var value = decimal.Parse(args[0].Replace(",", "."));
 
             if (args.Length == 1 && value == 0) return;
 
